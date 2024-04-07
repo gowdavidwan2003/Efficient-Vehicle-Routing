@@ -7,6 +7,12 @@ import requests
 import numpy as np
 import dwave
 import folium
+from datetime import datetime, timedelta
+from dwave.system.samplers import LeapHybridSampler
+import requests
+from datetime import timedelta
+from dwave.system.samplers import DWaveSampler
+from dwave.system.composites import EmbeddingComposite
 
 
 # Constants
@@ -89,12 +95,46 @@ def optimize_route(route, distances):
         route = best_route
     return route
 
+def calculate_arrival_times(destinations_times):
+    # Automatically initialize departure time as current time
+    departure_time = datetime.now()
+
+    arrival_times = []
+    current_time = departure_time
+    for t in destinations_times:
+        # Parse time string to get timedelta
+        delta = timedelta()
+        if 'day' in t:
+            days, time = t.split(", ")
+            day_delta = timedelta(days=int(days.split()[0]))
+            delta += day_delta
+            t = time
+
+        h, m, s = map(int, t.split(':'))
+        time_delta = timedelta(hours=h, minutes=m, seconds=s)
+        delta += time_delta
+
+        # Add the break time if not for the first destination
+        if arrival_times:
+            delta += timedelta(hours=3)
+
+        # Update the current time and append to arrival_times
+        current_time += delta
+        arrival_times.append(current_time)
+
+    return arrival_times
+
 # Calculate total distance of a route
 def total_distance(route, distances):
     total = 0
     for i in range(len(route) - 1):
         total += distances[route[i], route[i+1]]
     return total
+
+try:
+    import dwavebinarycsp
+except:
+    pass
 
 # Solve the optimization problem
 def optimize_routes(locations, truck_capacity, distance_matrix):
@@ -117,7 +157,60 @@ def total_hours(distance_matrix):
     total_hours = total_distance / TRUCK_MILEAGE  # Assuming constant speed
     return total_hours
 
-# Calculate total diesel cost
+# Function to calculate total distance, toll charges, and time
+
+
+# Constants
+BING_MAPS_API_KEY = "AvyY7OGE3G5E6Y7rdLxsEXTsAb89nxSGNmtVLWf5OXgxF61xZPlWGRF6fXtirFf0"
+
+# Function to calculate total distance, toll charges, and time
+def calculate_route_metrics(route):
+    total_distance = 0
+    total_toll_charges = 0
+    total_time = 0
+    time1 = []
+
+    for i in range(len(route) - 1):
+        origin = route[i]
+        destination = route[i + 1]
+        
+        # Construct Bing Maps API URL for route details
+        url = f"http://dev.virtualearth.net/REST/v1/Routes/Driving?wp.0={origin}&wp.1={destination}&key={BING_MAPS_API_KEY}"
+        
+        # Make request to Bing Maps API
+        response = requests.get(url)
+        data = response.json()
+
+        # Extract route details
+        resource_sets = data.get('resourceSets', [])
+        if resource_sets:
+            resources = resource_sets[0].get('resources', [])
+            if resources:
+                route_data = resources[0]
+                total_distance += route_data['travelDistance']
+                total_toll_charges += route_data.get('tolls', 0)
+                total_time += route_data['travelDuration']
+                time1.append(str(timedelta(seconds=route_data['travelDuration'])))
+
+    # Convert total time to hh:mm:ss format
+    total_time_formatted = str(timedelta(seconds=total_time))
+
+    return total_distance, total_toll_charges, total_time_formatted , time1
+
+
+def parse_and_format_times(destinations_times):
+    arrival_times = []
+    for t in destinations_times:
+        # Remove the surrounding quotes and convert to datetime object
+        dt_str = t.strip('"')
+        dt = eval(dt_str)
+
+        # Format the datetime object to the desired format
+        formatted_time = dt.strftime("%d %B %Y %H:%M:%S")
+        arrival_times.append(formatted_time)
+
+    return arrival_times
+
 def total_diesel_cost(distance_matrix):
     total_distance = np.sum(distance_matrix)
     total_liters = total_distance / TRUCK_MILEAGE
@@ -174,7 +267,7 @@ def calculate_charges(route):
     }
     headers = {
         "content-type": "application/json",
-        "x-api-key": "2rRmjdRBqPjPGmR738h2FDFM36Dfp9fP"
+        #"x-api-key": "8Hm9M7TjbQ2mbJbmQBTG26Pm6RrNh39j"
     }
     try:
         response = requests.post(url, json=payload, headers=headers)
@@ -185,47 +278,85 @@ def calculate_charges(route):
     except Exception as e:
         pass
 
+def create_tsp_csp(num_cities):
+    # Create a Constraint Satisfaction Problem (CSP) using D-Wave's framework
+    Q = dwavebinarycsp.ConstraintSatisfactionProblem(dwavebinarycsp.BINARY)
 
-# Function to calculate total distance, toll charges, and time
-import requests
-from datetime import timedelta
+    # Add constraints to ensure each city is visited exactly once
+    for i in range(num_cities):
+        q = ['city_{}_{}'.format(i, j) for j in range(num_cities)]
+        Q.add_constraint(dwavebinarycsp.exactly_one, q)
 
-# Constants
-BING_MAPS_API_KEY = "AvyY7OGE3G5E6Y7rdLxsEXTsAb89nxSGNmtVLWf5OXgxF61xZPlWGRF6fXtirFf0"
+    # Add constraints to ensure each visit is part of a single tour
+    for i in range(num_cities):
+        q = ['city_{}_{}'.format(j, i) for j in range(num_cities)]
+        Q.add_constraint(dwavebinarycsp.exactly_one, q)
 
-# Function to calculate total distance, toll charges, and time
-def calculate_route_metrics(route):
+    # Add constraints to prevent sub-tours
+    for i in range(num_cities):
+        for j in range(num_cities):
+            if i != j:
+                q = ['city_{}_{}'.format(i, j), 'city_{}_{}'.format(j, i)]
+                Q.add_constraint(dwavebinarycsp.exactly, q, 1)
+
+    return Q
+
+def solve_tsp(Q, sampler):
+    # Convert the CSP to a Binary Quadratic Model (BQM) and solve using D-Wave's hybrid sampler
+    G = dwavebinarycsp.stitch(Q)
+    sampleset = sampler.sample(G, num_reads=10)
+    best_solution = sampleset.first.sample
+    return best_solution
+
+def calculate_distance(route, distance_matrix):
     total_distance = 0
-    total_toll_charges = 0
-    total_time = 0
-
     for i in range(len(route) - 1):
         origin = route[i]
         destination = route[i + 1]
-        
-        # Construct Bing Maps API URL for route details
-        url = f"http://dev.virtualearth.net/REST/v1/Routes/Driving?wp.0={origin}&wp.1={destination}&key={BING_MAPS_API_KEY}"
-        
-        # Make request to Bing Maps API
-        response = requests.get(url)
-        data = response.json()
+        total_distance += distance_matrix[origin][destination]
+    return total_distance
 
-        # Extract route details
-        resource_sets = data.get('resourceSets', [])
-        if resource_sets:
-            resources = resource_sets[0].get('resources', [])
-            if resources:
-                route_data = resources[0]
-                total_distance += route_data['travelDistance']
-                total_toll_charges += route_data.get('tolls', 0)
-                total_time += route_data['travelDuration']
+def QUBO(distance_matrix, api_token):
+    n = len(distance_matrix)
 
-    # Convert total time to hh:mm:ss format
-    total_time_formatted = str(timedelta(seconds=total_time))
+    # Create the QUBO matrix
+    qubo = {}
+    for i in range(n):
+        for j in range(i + 1, n):
+            for k in range(n):
+                qubo[(i, j), (k, (k+1)%n)] = distance_matrix[i][k] + distance_matrix[j][((k+1)%n)]
 
-    return total_distance, total_toll_charges, total_time_formatted
+    Q = create_tsp_csp(num_cities=len(locations))
 
+    solution = solve_tsp(Q, sampler)
 
+    # Instantiate a D-Wave sampler
+    sampler = EmbeddingComposite(DWaveSampler(token=api_token))
+
+    # Submit the QUBO problem to the sampler
+    response = sampler.sample_qubo(qubo, num_reads=1000)
+
+    # Extract the best solution
+    best_solution = response.first.sample
+
+    # Convert the solution to a route
+    route = list(best_solution.keys())
+
+    # Sort the route by the first dimension of each edge
+    route.sort(key=lambda x: x[0])
+
+    # Find the valid path starting from city 0
+    current_city = 0
+    path = [current_city]
+    while len(path) < n:
+        next_city = [edge[1] for edge in route if edge[0] == current_city and edge[1] not in path][0]
+        path.append(next_city)
+        current_city = next_city
+
+    # Calculate the distance of the route
+    distance = calculate_distance(path, distance_matrix)
+
+    return path, distance
 
 
 
@@ -244,7 +375,7 @@ for city_name in selected_options:
     locations[city_name] = (latitude, longitude)
 
 if selected_options:
-    st.write("You selected:", selected_options)
+    #st.write("You selected:", selected_options)
     
     distance_matrix = calculate_distance_matrix(locations, BING_MAPS_API_KEY)
     # Optimize routes
@@ -253,9 +384,21 @@ if selected_options:
     for i, route in enumerate(routes):
         st.write(f"Truck Route:", " -> ".join(route))
 
-    total_distance, total_toll_charges, total_time = calculate_route_metrics(route)
+    total_distance, total_toll_charges, total_time , time1= calculate_route_metrics(route)
+
+    arrival_time = calculate_arrival_times(time1)
+
     st.write("Total Distance:", total_distance, "km")
-    
+    try:
+        # Define your D-Wave API token
+        DWAVE_API_TOKEN = "DEV-922fca0b1f77801db298a8a20fd5105b6069f5"
+        # Solve TSP using quantum annealing
+        shortest_route, shortest_distance = QUBO(distance_matrix, api_token=DWAVE_API_TOKEN)
+    except:
+        pass
+    # Print the formatted arrival times for each destination
+    for i, arrival_time in enumerate(arrival_time):
+        st.write(f"Destination {i + 1} estimated arrival time:", arrival_time)
     st.write("Total Time:", total_time)
     try:
         fcost,tcost = calculate_charges(route)
@@ -265,47 +408,51 @@ if selected_options:
         pass
     
 
-locations2 =  {}
-for city_name in route:
-    # Fetch the latitude and longitude values from the locations dictionary
-    latitude, longitude = locations1.get(city_name, (None, None))
-    # Store the latitude and longitude values in the location1 dictionary
-    locations2[city_name] = (latitude, longitude)
+try:
+    locations2 =  {}
+    for city_name in route:
+        # Fetch the latitude and longitude values from the locations dictionary
+        latitude, longitude = locations1.get(city_name, (None, None))
+        # Store the latitude and longitude values in the location1 dictionary
+        locations2[city_name] = (latitude, longitude)
 
 
-# Create a folium map centered at the first location
-first_location = list(locations2.values())[0][:2]
-mymap = folium.Map(location=[22.3511148, 78.6677428], zoom_start=5)
-st.write(locations2)
-print(locations2)
-# Function to add marker and polyline between two points
-def add_marker_and_route(start, end):
-    # Generate the URL for OSRM API
-    url = f'https://router.project-osrm.org/route/v1/driving/{start[1]},{start[0]};{end[1]},{end[0]}?geometries=geojson'
-    # Fetch route data from OSRM API
-    response = requests.get(url)
-    data = response.json()
-    # Extract route coordinates
-    route_coords = [[coord[1], coord[0]] for coord in data['routes'][0]['geometry']['coordinates']]
-    # Add marker and polyline to the map without popup
-    folium.Marker(end[:2]).add_to(mymap)
-    folium.PolyLine(locations=route_coords, color='blue').add_to(mymap)
-# Iterate over locations and add markers and routes
-previous_location = None
-for i, (city, coords) in enumerate(locations2.items()):
-    if i == len(locations2) - 1:
-        break
-    next_city = list(locations2.items())[i+1]
-    # Add marker for each location
-    folium.Marker(coords[:2]).add_to(mymap)
-    # Add route between current and next locations
-    add_marker_and_route(coords, next_city[1])
+    # Create a folium map centered at the first location
+    first_location = list(locations2.values())[0][:2]
+    mymap = folium.Map(location=[22.3511148, 78.6677428], zoom_start=5)
+    #st.write(locations2)
+    print(locations2)
+    # Function to add marker and polyline between two points
+    def add_marker_and_route(start, end):
+        # Generate the URL for OSRM API
+        url = f'https://router.project-osrm.org/route/v1/driving/{start[1]},{start[0]};{end[1]},{end[0]}?geometries=geojson'
+        # Fetch route data from OSRM API
+        response = requests.get(url)
+        data = response.json()
+        # Extract route coordinates
+        route_coords = [[coord[1], coord[0]] for coord in data['routes'][0]['geometry']['coordinates']]
+        # Add marker and polyline to the map without popup
+        folium.Marker(end[:2]).add_to(mymap)
+        folium.PolyLine(locations=route_coords, color='blue').add_to(mymap)
+    # Iterate over locations and add markers and routes
+    previous_location = None
+    for i, (city, coords) in enumerate(locations2.items()):
+        if i == len(locations2) - 1:
+            break
+        next_city = list(locations2.items())[i+1]
+        # Add marker for each location
+        folium.Marker(coords[:2]).add_to(mymap)
+        # Add route between current and next locations
+        add_marker_and_route(coords, next_city[1])
 
-# Save the map to an HTML file
-mymap.save('map.html')
-# Read the HTML file
-with open('map.html', 'r') as file:
-    html_content = file.read()
+    # Save the map to an HTML file
+    mymap.save('map.html')
+    # Read the HTML file
+    with open('map.html', 'r') as file:
+        html_content = file.read()
 
-# Display the HTML content
-st.components.v1.html(html_content, width=800, height=600)
+    # Display the HTML content
+    st.components.v1.html(html_content, width=800, height=600)
+
+except:
+    pass
