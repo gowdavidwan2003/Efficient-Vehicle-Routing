@@ -1,18 +1,9 @@
 import streamlit as st
 import numpy as np
 import pandas as pd
-import requests
-from datetime import timedelta
-import requests
-import numpy as np
-import dwave
 import folium
 from datetime import datetime, timedelta
-from dwave.system.samplers import LeapHybridSampler
 import requests
-from datetime import timedelta
-from dwave.system.samplers import DWaveSampler
-from dwave.system.composites import EmbeddingComposite
 
 
 # Constants
@@ -131,10 +122,6 @@ def total_distance(route, distances):
         total += distances[route[i], route[i+1]]
     return total
 
-try:
-    import dwavebinarycsp
-except:
-    pass
 
 # Solve the optimization problem
 def optimize_routes(locations, truck_capacity, distance_matrix):
@@ -267,7 +254,7 @@ def calculate_charges(route):
     }
     headers = {
         "content-type": "application/json",
-        #"x-api-key": "8Hm9M7TjbQ2mbJbmQBTG26Pm6RrNh39j"
+        "x-api-key": "8Hm9M7TjbQ2mbJbmQBTG26Pm6RrNh39j"
     }
     try:
         response = requests.post(url, json=payload, headers=headers)
@@ -278,35 +265,6 @@ def calculate_charges(route):
     except Exception as e:
         pass
 
-def create_tsp_csp(num_cities):
-    # Create a Constraint Satisfaction Problem (CSP) using D-Wave's framework
-    Q = dwavebinarycsp.ConstraintSatisfactionProblem(dwavebinarycsp.BINARY)
-
-    # Add constraints to ensure each city is visited exactly once
-    for i in range(num_cities):
-        q = ['city_{}_{}'.format(i, j) for j in range(num_cities)]
-        Q.add_constraint(dwavebinarycsp.exactly_one, q)
-
-    # Add constraints to ensure each visit is part of a single tour
-    for i in range(num_cities):
-        q = ['city_{}_{}'.format(j, i) for j in range(num_cities)]
-        Q.add_constraint(dwavebinarycsp.exactly_one, q)
-
-    # Add constraints to prevent sub-tours
-    for i in range(num_cities):
-        for j in range(num_cities):
-            if i != j:
-                q = ['city_{}_{}'.format(i, j), 'city_{}_{}'.format(j, i)]
-                Q.add_constraint(dwavebinarycsp.exactly, q, 1)
-
-    return Q
-
-def solve_tsp(Q, sampler):
-    # Convert the CSP to a Binary Quadratic Model (BQM) and solve using D-Wave's hybrid sampler
-    G = dwavebinarycsp.stitch(Q)
-    sampleset = sampler.sample(G, num_reads=10)
-    best_solution = sampleset.first.sample
-    return best_solution
 
 def calculate_distance(route, distance_matrix):
     total_distance = 0
@@ -315,50 +273,6 @@ def calculate_distance(route, distance_matrix):
         destination = route[i + 1]
         total_distance += distance_matrix[origin][destination]
     return total_distance
-
-def QUBO(distance_matrix, api_token):
-    n = len(distance_matrix)
-
-    # Create the QUBO matrix
-    qubo = {}
-    for i in range(n):
-        for j in range(i + 1, n):
-            for k in range(n):
-                qubo[(i, j), (k, (k+1)%n)] = distance_matrix[i][k] + distance_matrix[j][((k+1)%n)]
-
-    Q = create_tsp_csp(num_cities=len(locations))
-
-    solution = solve_tsp(Q, sampler)
-
-    # Instantiate a D-Wave sampler
-    sampler = EmbeddingComposite(DWaveSampler(token=api_token))
-
-    # Submit the QUBO problem to the sampler
-    response = sampler.sample_qubo(qubo, num_reads=1000)
-
-    # Extract the best solution
-    best_solution = response.first.sample
-
-    # Convert the solution to a route
-    route = list(best_solution.keys())
-
-    # Sort the route by the first dimension of each edge
-    route.sort(key=lambda x: x[0])
-
-    # Find the valid path starting from city 0
-    current_city = 0
-    path = [current_city]
-    while len(path) < n:
-        next_city = [edge[1] for edge in route if edge[0] == current_city and edge[1] not in path][0]
-        path.append(next_city)
-        current_city = next_city
-
-    # Calculate the distance of the route
-    distance = calculate_distance(path, distance_matrix)
-
-    return path, distance
-
-
 
 options = list(locations1.keys())
 
@@ -389,13 +303,6 @@ if selected_options:
     arrival_time = calculate_arrival_times(time1)
 
     st.write("Total Distance:", total_distance, "km")
-    try:
-        # Define your D-Wave API token
-        DWAVE_API_TOKEN = "DEV-922fca0b1f77801db298a8a20fd5105b6069f5"
-        # Solve TSP using quantum annealing
-        shortest_route, shortest_distance = QUBO(distance_matrix, api_token=DWAVE_API_TOKEN)
-    except:
-        pass
     # Print the formatted arrival times for each destination
     for i, arrival_time in enumerate(arrival_time):
         st.write(f"Destination {i + 1} estimated arrival time:", arrival_time)
