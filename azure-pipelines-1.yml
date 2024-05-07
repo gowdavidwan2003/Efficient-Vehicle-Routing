@@ -1,0 +1,16 @@
+steps:
+- script: echo 'Hello, world!'
+  displayName: 'Execute a single-line script'
+
+- script: |
+    echo 'Incorporate additional tasks to build, test, and deploy the Vehicle Routing Protocol project.'
+    echo 'Visit https://aka.ms/yaml for more information.'
+  displayName: 'Execute a script with multiple lines'
+
+- script: |
+    pip install streamlit
+    streamlit run app.py &
+    APP_PID=$!
+    # Run your tests here
+    kill $APP_PID
+  displayName: 'Run Streamlit app'
