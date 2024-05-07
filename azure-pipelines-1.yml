@@ -8,9 +8,6 @@ steps:
   displayName: 'Execute a script with multiple lines'
 
 - script: |
-    pip install streamlit
-    streamlit run app.py &
-    APP_PID=$!
-    # Run your tests here
-    kill $APP_PID
+    pip install -r requirements.txt
+    streamlit run app.py
   displayName: 'Run Streamlit app'
