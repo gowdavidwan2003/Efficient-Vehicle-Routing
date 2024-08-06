@@ -3,7 +3,7 @@
 **ALL_IN_RED - Navigation for the Real World**
 
 ---
-DEMO [https://smart-route.streamlit.app/]
+[DEMO](https://smart-route.streamlit.app/)
 
 
 **Overview:**
