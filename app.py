@@ -254,7 +254,7 @@ def calculate_charges(route):
     }
     headers = {
         "content-type": "application/json",
-        "x-api-key": "8Hm9M7TjbQ2mbJbmQBTG26Pm6RrNh39j"
+        "x-api-key": "373gB8f3MBBMTgt2pRjd8fgNMFBH76Jg"
     }
     try:
         response = requests.post(url, json=payload, headers=headers)
@@ -288,7 +288,7 @@ for city_name in selected_options:
     # Store the latitude and longitude values in the location1 dictionary
     locations[city_name] = (latitude, longitude)
 
-if selected_options:
+if st.button("Submit"):
     #st.write("You selected:", selected_options)
     
     distance_matrix = calculate_distance_matrix(locations, BING_MAPS_API_KEY)
