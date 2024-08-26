@@ -7,7 +7,7 @@ import requests
 
 
 # Constants
-BING_MAPS_API_KEY = "AvyY7OGE3G5E6Y7rdLxsEXTsAb89nxSGNmtVLWf5OXgxF61xZPlWGRF6fXtirFf0"
+BING_MAPS_API_KEY = "Arz6tw0nI94XNOW_HCRW0NOKzyIyZDmIcKq4xGK5wsn3wRW83tX9Y7hhkquvGEMM"
 TRUCK_CAPACITY = 1000  # Assuming truck capacity in terms of product units
 SALARY_PER_HOUR = 500  # Salary of driver per hour in rupees
 TRUCK_MILEAGE = 5  # Truck mileage in kilometers per liter
@@ -148,7 +148,7 @@ def total_hours(distance_matrix):
 
 
 # Constants
-BING_MAPS_API_KEY = "AvyY7OGE3G5E6Y7rdLxsEXTsAb89nxSGNmtVLWf5OXgxF61xZPlWGRF6fXtirFf0"
+BING_MAPS_API_KEY = "Arz6tw0nI94XNOW_HCRW0NOKzyIyZDmIcKq4xGK5wsn3wRW83tX9Y7hhkquvGEMM"
 
 # Function to calculate total distance, toll charges, and time
 def calculate_route_metrics(route):
@@ -254,7 +254,7 @@ def calculate_charges(route):
     }
     headers = {
         "content-type": "application/json",
-        "x-api-key": "8Hm9M7TjbQ2mbJbmQBTG26Pm6RrNh39j"
+        "x-api-key": "373gB8f3MBBMTgt2pRjd8fgNMFBH76Jg"
     }
     try:
         response = requests.post(url, json=payload, headers=headers)
@@ -288,7 +288,7 @@ for city_name in selected_options:
     # Store the latitude and longitude values in the location1 dictionary
     locations[city_name] = (latitude, longitude)
 
-if selected_options:
+if st.button("Submit"):
     #st.write("You selected:", selected_options)
     
     distance_matrix = calculate_distance_matrix(locations, BING_MAPS_API_KEY)
