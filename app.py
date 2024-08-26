@@ -7,7 +7,7 @@ import requests
 
 
 # Constants
-BING_MAPS_API_KEY = "AvyY7OGE3G5E6Y7rdLxsEXTsAb89nxSGNmtVLWf5OXgxF61xZPlWGRF6fXtirFf0"
+BING_MAPS_API_KEY = "Arz6tw0nI94XNOW_HCRW0NOKzyIyZDmIcKq4xGK5wsn3wRW83tX9Y7hhkquvGEMM"
 TRUCK_CAPACITY = 1000  # Assuming truck capacity in terms of product units
 SALARY_PER_HOUR = 500  # Salary of driver per hour in rupees
 TRUCK_MILEAGE = 5  # Truck mileage in kilometers per liter
@@ -148,7 +148,7 @@ def total_hours(distance_matrix):
 
 
 # Constants
-BING_MAPS_API_KEY = "AvyY7OGE3G5E6Y7rdLxsEXTsAb89nxSGNmtVLWf5OXgxF61xZPlWGRF6fXtirFf0"
+BING_MAPS_API_KEY = "Arz6tw0nI94XNOW_HCRW0NOKzyIyZDmIcKq4xGK5wsn3wRW83tX9Y7hhkquvGEMM"
 
 # Function to calculate total distance, toll charges, and time
 def calculate_route_metrics(route):
